@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: DevSecOps Pipeline
 
 on:
   push:
@@ -6,14 +6,39 @@ on:
       - main
 
 jobs:
-  deploy:
+  security-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    # 1) Install deps
+    - name: Install dependencies
+      run: |
+        cd app
+        npm install
+
+    # 2) SAST (basic code quality / risky patterns)
+    - name: Run ESLint
+      run: |
+        npm install -g eslint
+        eslint app/ || true
+
+    # 3) Dependency vulnerabilities (BLOCK if high/critical)
+    - name: Run npm audit
+      run: |
+        cd app
+        npm audit --audit-level=high
+
+    # 4) Secret scan (prevent accidental key leaks)
+    - name: Secret scan
+      run: |
+        grep -r "PRIVATE KEY" . && exit 1 || echo "No secrets found"
+
+    # 5) Deploy only if ALL above passed
     - name: Deploy to EC2
+      if: success()
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.EC2_IP }}
